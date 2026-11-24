@@ -1,0 +1,25 @@
+# Build output
+target/
+**/target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# Frontend
+node_modules/
+frontend/dist/
+frontend/coverage/
+
+# Local secrets - copy .env.example instead
+.env
+.env.local
+frontend/.env
+frontend/.env.local
+
+# IDE / OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

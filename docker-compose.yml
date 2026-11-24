@@ -1,0 +1,208 @@
+# Orgwise MCO2 - full stack.
+#
+#   cp .env.example .env
+#   docker compose up --build
+#
+# Open the SPA at http://localhost:3000, the gateway at http://localhost:8080 and the Eureka
+# dashboard at http://localhost:8761. Domain services are NOT published on the host: everything
+# goes through the gateway, which blocks /api/v1/internal/**.
+#
+# Start-up order (enforced with healthchecks):
+#   mysql -> config-server -> discovery-server -> 5 domain services -> api-gateway -> frontend
+name: orgwise
+
+x-service-env: &service-env
+  CONFIG_SERVER_URL: http://config-server:8888
+  SPRING_CONFIG_IMPORT: "optional:configserver:http://config-server:8888"
+  EUREKA_URL: http://discovery-server:8761/eureka/
+  EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
+  EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+  DB_HOST: mysql
+  DB_PORT: "3306"
+  JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+  JAVA_OPTS: "-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"
+
+x-backend: &backend
+  restart: unless-stopped
+  networks: [orgwise]
+
+x-needs-infra: &needs-infra
+  mysql:
+    condition: service_healthy
+  config-server:
+    condition: service_healthy
+  discovery-server:
+    condition: service_healthy
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: orgwise-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+      IDENTITY_DB_USER: ${IDENTITY_DB_USER:-identity_user}
+      IDENTITY_DB_PASSWORD: ${IDENTITY_DB_PASSWORD:?set IDENTITY_DB_PASSWORD in .env}
+      EVENT_DB_USER: ${EVENT_DB_USER:-event_user}
+      EVENT_DB_PASSWORD: ${EVENT_DB_PASSWORD:?set EVENT_DB_PASSWORD in .env}
+      EXPENSE_DB_USER: ${EXPENSE_DB_USER:-expense_user}
+      EXPENSE_DB_PASSWORD: ${EXPENSE_DB_PASSWORD:?set EXPENSE_DB_PASSWORD in .env}
+      TREASURY_DB_USER: ${TREASURY_DB_USER:-treasury_user}
+      TREASURY_DB_PASSWORD: ${TREASURY_DB_PASSWORD:?set TREASURY_DB_PASSWORD in .env}
+      REPORTING_DB_USER: ${REPORTING_DB_USER:-reporting_user}
+      REPORTING_DB_PASSWORD: ${REPORTING_DB_PASSWORD:?set REPORTING_DB_PASSWORD in .env}
+    ports:
+      - "${MYSQL_HOST_PORT:-3307}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # TCP (127.0.0.1) on purpose: during the init scripts MySQL only listens on the socket,
+      # so this stays unhealthy until users and schemas exist.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [orgwise]
+
+  config-server:
+    <<: *backend
+    build:
+      context: .
+      dockerfile: config-server/Dockerfile
+    image: orgwise/config-server
+    environment:
+      SPRING_PROFILES_ACTIVE: native
+      SPRING_CLOUD_CONFIG_SERVER_NATIVE_SEARCH_LOCATIONS: file:/config-repo
+      JWT_SECRET: ${JWT_SECRET}
+    volumes:
+      - ./config-repo:/config-repo:ro
+
+  discovery-server:
+    <<: *backend
+    build:
+      context: .
+      dockerfile: discovery-server/Dockerfile
+    image: orgwise/discovery-server
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8888
+      SPRING_CONFIG_IMPORT: "optional:configserver:http://config-server:8888"
+    ports:
+      - "${EUREKA_HOST_PORT:-8761}:8761"
+    depends_on:
+      config-server:
+        condition: service_healthy
+
+  identity-service:
+    <<: *backend
+    build:
+      context: .
+      dockerfile: identity-service/Dockerfile
+    image: orgwise/identity-service
+    environment:
+      <<: *service-env
+      IDENTITY_DB_USER: ${IDENTITY_DB_USER:-identity_user}
+      IDENTITY_DB_PASSWORD: ${IDENTITY_DB_PASSWORD}
+    depends_on: *needs-infra
+
+  event-service:
+    <<: *backend
+    build:
+      context: .
+      dockerfile: event-service/Dockerfile
+    image: orgwise/event-service
+    environment:
+      <<: *service-env
+      EVENT_DB_USER: ${EVENT_DB_USER:-event_user}
+      EVENT_DB_PASSWORD: ${EVENT_DB_PASSWORD}
+    depends_on: *needs-infra
+
+  expense-service:
+    <<: *backend
+    build:
+      context: .
+      dockerfile: expense-service/Dockerfile
+    image: orgwise/expense-service
+    environment:
+      <<: *service-env
+      EXPENSE_DB_USER: ${EXPENSE_DB_USER:-expense_user}
+      EXPENSE_DB_PASSWORD: ${EXPENSE_DB_PASSWORD}
+    depends_on: *needs-infra
+
+  treasury-service:
+    <<: *backend
+    build:
+      context: .
+      dockerfile: treasury-service/Dockerfile
+    image: orgwise/treasury-service
+    environment:
+      <<: *service-env
+      TREASURY_DB_USER: ${TREASURY_DB_USER:-treasury_user}
+      TREASURY_DB_PASSWORD: ${TREASURY_DB_PASSWORD}
+      TREASURY_INITIAL_BALANCE: ${TREASURY_INITIAL_BALANCE:-100000.00}
+    depends_on: *needs-infra
+
+  reporting-service:
+    <<: *backend
+    build:
+      context: .
+      dockerfile: reporting-service/Dockerfile
+    image: orgwise/reporting-service
+    environment:
+      <<: *service-env
+      REPORTING_DB_USER: ${REPORTING_DB_USER:-reporting_user}
+      REPORTING_DB_PASSWORD: ${REPORTING_DB_PASSWORD}
+    depends_on: *needs-infra
+
+  api-gateway:
+    <<: *backend
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    image: orgwise/api-gateway
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8888
+      SPRING_CONFIG_IMPORT: "optional:configserver:http://config-server:8888"
+      EUREKA_URL: http://discovery-server:8761/eureka/
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ALLOWED_ORIGINS: http://localhost:${FRONTEND_HOST_PORT:-3000},http://localhost:5173
+    ports:
+      - "${GATEWAY_HOST_PORT:-8080}:8080"
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      identity-service:
+        condition: service_healthy
+      event-service:
+        condition: service_healthy
+      expense-service:
+        condition: service_healthy
+      treasury-service:
+        condition: service_healthy
+      reporting-service:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: /api/v1
+    image: orgwise/frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_HOST_PORT:-3000}:80"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    networks: [orgwise]
+
+networks:
+  orgwise:
+    name: orgwise
+
+volumes:
+  mysql-data:

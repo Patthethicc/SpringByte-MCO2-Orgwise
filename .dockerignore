@@ -1,0 +1,16 @@
+# Keep the backend build context small: only sources and POMs are needed.
+.git
+.github
+.idea
+.vscode
+**/target
+**/*.iml
+**/.DS_Store
+.env
+frontend
+docs
+postman
+db
+mco1
+*.md
+!README.md

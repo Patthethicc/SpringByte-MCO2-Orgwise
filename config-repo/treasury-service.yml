@@ -1,0 +1,41 @@
+# Served by the Config Server to treasury-service (native profile).
+# Shared settings (JWT secret, Eureka URL, Resilience4J defaults) live in application.yml.
+spring:
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${TREASURY_DB_NAME:orgwise_treasury}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${TREASURY_DB_USER:treasury_user}
+    password: ${TREASURY_DB_PASSWORD:treasury_pass}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+
+# Circuit breakers for treasury -> expense (fail closed + compensate). With alphanumeric ids
+# every Feign method gets its own breaker; all of them use this "default" config.
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        ignore-exceptions:
+          - feign.FeignException$FeignClientException
+
+orgwise:
+  clients:
+    expense-service:
+      url: ${EXPENSE_SERVICE_URL:}
+  treasury:
+    account-name: Main Treasury
+    initial-balance: ${TREASURY_INITIAL_BALANCE:100000.00}
+    currency: PHP
+    reconciliation:
+      enabled: true
+      pending-timeout: PT2M
+      fixed-delay: PT1M
+      initial-delay: PT1M

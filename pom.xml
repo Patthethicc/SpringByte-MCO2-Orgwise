@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Orgwise MCO2 - root reactor (aggregator) POM.
+
+  This file only aggregates modules so that `./mvnw verify` and the Docker
+  multi-stage builds (`mvn -pl <module> -am package`) work from the repo root.
+  Each module keeps its own parent so that modules can be filled in
+  independently; add your module to <modules> once its pom.xml has content.
+
+  Version pairing: no Spring Cloud release train supports Boot 4.1.x yet
+  (2025.1.x targets Boot 4.0.x and 2026.0.x targets Boot 4.2.x), so, as the
+  plan prescribes, all modules pin the latest Boot 4.0.x + Cloud 2025.1.x pair:
+  Spring Boot 4.0.10 and Spring Cloud 2025.1.5.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.fintech.orgwise</groupId>
+    <artifactId>orgwise-mco2</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>orgwise-mco2</name>
+    <description>Orgwise microservices - reactor aggregator</description>
+
+    <modules>
+        <!-- Add each module here once its pom.xml is filled in:
+        <module>orgwise-common</module>
+        <module>config-server</module>
+        <module>discovery-server</module>
+        <module>api-gateway</module>
+        <module>identity-service</module>
+        <module>event-service</module>
+        <module>expense-service</module>
+        <module>reporting-service</module>
+        -->
+        <module>treasury-service</module>
+    </modules>
+</project>

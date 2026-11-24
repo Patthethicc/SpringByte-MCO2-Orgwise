@@ -1,0 +1,64 @@
+spring:
+  application:
+    name: treasury-service
+  cloud:
+    config:
+      enabled: false
+    discovery:
+      enabled: false
+    openfeign:
+      circuitbreaker:
+        enabled: true
+        alphanumeric-ids:
+          enabled: true
+      client:
+        config:
+          default:
+            connect-timeout: 1000
+            read-timeout: 1500
+    circuitbreaker:
+      resilience4j:
+        disable-thread-pool: true
+  datasource:
+    url: jdbc:h2:mem:orgwise_treasury;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+
+eureka:
+  client:
+    enabled: false
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-size: 100
+        minimum-number-of-calls: 100
+        ignore-exceptions:
+          - feign.FeignException$FeignClientException
+
+jwt:
+  secret: dGVzdC1vbmx5LXNlY3JldC1mb3ItdHJlYXN1cnktc2VydmljZS10ZXN0cyEhIQ==
+
+orgwise:
+  clients:
+    expense-service:
+      url: http://localhost:65530
+  treasury:
+    account-name: Test Treasury
+    initial-balance: 10000.00
+    currency: PHP
+    reconciliation:
+      enabled: false
+      pending-timeout: PT2M
+      fixed-delay: PT1H
+      initial-delay: PT1H
+
+logging:
+  level:
+    com.fintech.orgwise.treasury: INFO

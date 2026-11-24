@@ -1,0 +1,102 @@
+# treasury-service - local defaults.
+# The Config Server (config-repo/treasury-service.yml + config-repo/application.yml) overrides
+# these when it is reachable; the service still starts on these values if it is not.
+server:
+  port: ${SERVER_PORT:8084}
+
+spring:
+  application:
+    name: treasury-service
+  config:
+    import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${TREASURY_DB_NAME:orgwise_treasury}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${TREASURY_DB_USER:treasury_user}
+    password: ${TREASURY_DB_PASSWORD:treasury_pass}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  cloud:
+    openfeign:
+      circuitbreaker:
+        enabled: true
+        alphanumeric-ids:
+          enabled: true
+      client:
+        config:
+          default:
+            connect-timeout: 2000
+            read-timeout: 5000
+    circuitbreaker:
+      resilience4j:
+        # Run Feign calls on the caller's thread so the user's JWT can be forwarded.
+        disable-thread-pool: true
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+  instance:
+    prefer-ip-address: true
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        # A 4xx from expense-service is a business answer, not an outage.
+        ignore-exceptions:
+          - feign.FeignException$FeignClientException
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 6s
+
+jwt:
+  # Base64-encoded HS256 secret shared by every service (served by the Config Server).
+  secret: ${JWT_SECRET:b3Jnd2lzZS1kZXYtb25seS1zZWNyZXQtY2hhbmdlLW1lLTMyYnl0ZXMhIQ==}
+
+orgwise:
+  clients:
+    expense-service:
+      # Empty = resolve through Eureka. Set to e.g. http://localhost:8083 to bypass discovery.
+      url: ${EXPENSE_SERVICE_URL:}
+  treasury:
+    account-name: Main Treasury
+    initial-balance: ${TREASURY_INITIAL_BALANCE:100000.00}
+    currency: PHP
+    reconciliation:
+      enabled: true
+      pending-timeout: PT2M
+      fixed-delay: PT1M
+      initial-delay: PT1M
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    circuitbreakers:
+      enabled: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
